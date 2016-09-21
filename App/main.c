@@ -11,7 +11,6 @@ void loop(void* params) {
 	unsigned long* _params = (unsigned long*) params;
 	struct drand48_data buffer;
 	double x, y;
-	printf("Thread %ld starts with %ld shots\n", _params[1], _params[0]);
 	srand48_r(time(NULL) * _params[1], &buffer);
 	for( ; _params[0] > 0; _params[0]--) {
 		drand48_r(&buffer, &x);
@@ -47,10 +46,10 @@ int main(int argc, char** argv) {
 	loop(params);	
 
 	// Wait until each thread returns
-	while (livingThreads != 0);
+	while (livingThreads > 0);
 
 	for (i = 0; i < threads; i++) tothits += hits[i];
-	long double pi = ((long double)tothits * 4)/(long double)shots;
+	long double pi = (long double)(tothits << 2)/(long double)shots;
 	printf("Pi is %.12Lf\n", pi);
 	free(hits);
 

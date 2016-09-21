@@ -11,8 +11,6 @@
 
 #include "libthrd.h"
 
-#define MAX_THREADS 100
-
 /* Global variables */
 int livingThreads = 0;
 
