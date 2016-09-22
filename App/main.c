@@ -15,7 +15,7 @@ void loop(void* params) {
 	for( ; _params[0] > 0; _params[0]--) {
 		drand48_r(&buffer, &x);
 		drand48_r(&buffer, &y);
-		if ((x*x + y*y) <= 1) hits[_params[1]]++;
+		if ((x*x + y*y) < 1) hits[_params[1]]++;
 	}
 }
 
@@ -23,6 +23,7 @@ void loop(void* params) {
 /** Main function **/
 int main(int argc, char** argv) {
 	unsigned long shots = 0, threads = 0, tothits = 0, params[2], i = 0;
+	clock_t start, end;
 	if (argc < 3) {
 		printf("Usage: %s shots threads\n", argv[0]);
 		return -1;
@@ -37,6 +38,8 @@ int main(int argc, char** argv) {
 	hits = (unsigned long*) calloc(threads, sizeof(unsigned long));
 	params[0] = shots/threads;
 
+	start = clock();
+
 	for (i = 1; i < threads; i++) {
 		params[1] = i;
 		lanceThread(loop, params, 2 * sizeof(unsigned long));
@@ -50,7 +53,9 @@ int main(int argc, char** argv) {
 
 	for (i = 0; i < threads; i++) tothits += hits[i];
 	long double pi = (long double)(tothits << 2)/(long double)shots;
+	end = clock();
 	printf("Pi is %.12Lf\n", pi);
+	printf("Processing time: %f s\n", (double)(end - start)/CLOCKS_PER_SEC);
 	free(hits);
 
 	return 0;
