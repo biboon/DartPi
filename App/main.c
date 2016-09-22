@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include <libthrd.h>
 
@@ -24,6 +25,7 @@ void loop(void* params) {
 int main(int argc, char** argv) {
 	unsigned long shots = 0, threads = 0, tothits = 0, params[2], i = 0;
 	clock_t start, end;
+	struct timeval tstart, tend;
 	if (argc < 3) {
 		printf("Usage: %s shots threads\n", argv[0]);
 		return -1;
@@ -33,12 +35,13 @@ int main(int argc, char** argv) {
 	threads = strtol(argv[2], NULL, 10);
 
 	printf("This sofware will give an approximation of Pi using\n");
-	printf("Dartboard algorithm with %ld shots and %ld threads\n\n", shots, threads);
+	printf("Dartboard algorithm with %ld shots and %ld threads\n", shots, threads);
 	
 	hits = (unsigned long*) calloc(threads, sizeof(unsigned long));
 	params[0] = shots/threads;
 
 	start = clock();
+	gettimeofday(&tstart, NULL);
 
 	for (i = 1; i < threads; i++) {
 		params[1] = i;
@@ -54,8 +57,11 @@ int main(int argc, char** argv) {
 	for (i = 0; i < threads; i++) tothits += hits[i];
 	long double pi = (long double)(tothits << 2)/(long double)shots;
 	end = clock();
-	printf("Pi is %.12Lf\n", pi);
-	printf("Processing time: %f s\n", (double)(end - start)/CLOCKS_PER_SEC);
+	gettimeofday(&tend, NULL);
+
+	printf("Pi is %.12Lf\n\n", pi);
+	printf("CPU time: %f s\n", (double)(end - start)/CLOCKS_PER_SEC);
+	printf("Real time: %f s\n", (double)(tend.tv_usec - tstart.tv_usec)/1e6 + (double)(tend.tv_sec - tstart.tv_sec));
 	free(hits);
 
 	return 0;
