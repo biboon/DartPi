@@ -33,12 +33,12 @@ int main(int argc, char** argv) {
 
 	shots = strtol(argv[1], NULL, 10);
 	threads = strtol(argv[2], NULL, 10);
+	hits = (unsigned long*) calloc(threads, sizeof(unsigned long));
+	params[0] = shots / threads;
+	shots = params[0] * threads;
 
 	printf("This sofware will give an approximation of Pi using\n");
 	printf("Dartboard algorithm with %ld shots and %ld threads\n", shots, threads);
-	
-	hits = (unsigned long*) calloc(threads, sizeof(unsigned long));
-	params[0] = shots/threads;
 
 	start = clock();
 	gettimeofday(&tstart, NULL);
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
 	}
 
 	params[1] = 0;
-	loop(params);	
+	loop(params);
 
 	// Wait until each thread returns
 	while (livingThreads > 0);
