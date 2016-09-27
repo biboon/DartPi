@@ -85,8 +85,15 @@ int set_mutex(int semid, int index, unsigned short val) {
 	return status;
 }
 
+/* Gets the value of semval of the index-th mutex of semaphore semid */
+int get_mutex(int semid, int index) {
+	int status = semctl(semid, index, GETVAL);
+	if (status < 0) { perror("libthrd.set_mutex.semctl"); exit(EXIT_FAILURE); }
+	return status;
+}
+
 /* Main function to request/free the resource */
-static int PV(int semid, unsigned short index, short act, short flg) {
+int PV(int semid, unsigned short index, short act, short flg) {
 	struct sembuf op;
 	op.sem_num = index;
 	op.sem_op = act; /* P = -1; V = 1 */
