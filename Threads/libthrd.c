@@ -44,26 +44,27 @@ static int sem_alloc(int nb) {
 }
 
 /* Frees the semaphore */
-void sem_free(int semid) {
+int sem_free(int semid) {
 	#ifdef DEBUG
 		printf("Freeing the semaphore\n");
 	#endif
 	int status = semctl(semid, 0, IPC_RMID);
 	if (status < 0) perror("libthrd.sem_free.semctl");
+	return status;
 }
 
 /* Initiates the semaphore at value val */
-static void sem_init(int semid, int nb, unsigned short val) {
-	int status = -1;
+static int sem_init(int semid, int nb, unsigned short val) {
+	int status;
 	union semun argument;
 	unsigned short values[nb];
 
 	/* Initializing semaphore values to val */
 	memset(values, val, nb * sizeof(unsigned short));
 	argument.array = values;
-
 	status = semctl (semid, 0, SETALL, argument);
 	if (status < 0) { perror("libthrd.sem_init.semctl"); exit(EXIT_FAILURE); }
+	return status;
 }
 
 /* Inits a semaphore of nb elements at the value val */
@@ -71,6 +72,17 @@ int initMutexes(int nb, unsigned short val) {
 	int semid = sem_alloc(nb);
 	sem_init(semid, nb, val);
 	return semid;
+}
+
+/* Sets the index-th mutex of semaphore semid at the value val */
+int set_mutex(int semid, int index, unsigned short val) {
+	int status;
+	union semun argument;
+
+	argument.val = val;
+	status = semctl(semid, index, SETVAL, argument);
+	if (status < 0) { perror("libthrd.set_mutex.semctl"); exit(EXIT_FAILURE); }
+	return status;
 }
 
 /* Main function to request/free the resource */
