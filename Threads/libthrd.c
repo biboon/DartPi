@@ -4,12 +4,15 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
+#include <errno.h>
 
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/types.h>
 
 #include "libthrd.h"
+
+//#define MAX_THREADS 12
 
 /* Global variables */
 int livingThreads = 0;
@@ -21,26 +24,31 @@ union semun {
 	struct seminfo *__buf;
 };
 
+typedef struct {
+	void (*function)(void*);
+	void *argument;
+} TaskInfo;
+
 
 /* ---------- */
 /* Semaphores */
 /* ---------- */
 /* Requests a semaphore with R/W of nb elements */
 static int sem_alloc(int nb) {
-	#ifdef DEBUG
-		fprintf(stderr, "Creating %d semaphores\n", nb);
-	#endif
-	int semid = semget(IPC_PRIVATE, nb, 0666 | IPC_CREAT);
+	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
 	if (semid < 0) { perror("libthrd.sem_alloc.semget"); exit(EXIT_FAILURE); }
+	#ifdef DEBUG
+		printf("Created semaphore #%d of %d mutexes\n", semid, nb);
+	#endif
 	return semid;
 }
 
 /* Frees the semaphore */
 void sem_free(int semid) {
 	#ifdef DEBUG
-		fprintf(stderr, "Freeing the semaphore\n");
+		printf("Freeing the semaphore\n");
 	#endif
-	int status = semctl(semid, 0, IPC_RMID, NULL);
+	int status = semctl(semid, 0, IPC_RMID);
 	if (status < 0) perror("libthrd.sem_free.semctl");
 }
 
@@ -66,75 +74,86 @@ int initMutexes(int nb, unsigned short val) {
 }
 
 /* Main function to request/free the resource */
-static int PV(int semid, int index, int act) {
+static int PV(int semid, unsigned short index, short act, short flg) {
 	struct sembuf op;
 	op.sem_num = index;
 	op.sem_op = act; /* P = -1; V = 1 */
-	op.sem_flg = 0;
+	op.sem_flg = flg;
 	return semop(semid, &op, 1);
 }
 
 /* Request resource to the semaphore and set the calling thread to sleep if
    it is not yet available. Thread resumes when resource is given. */
-void P(int semid, int index) {
-	if (PV(semid, index, -1) < 0) perror ("libthrd.P");
+int P(int semid, int index) {
+	int status = PV(semid, index, -1, 0);
+	if (status < 0) perror("libthrd.P");
+	return status;
+}
+
+/* Tries a request to the semaphore and returns immediately. 0 if the lock
+   succeeded, 1 if the mutex could not be locked because it already was, or -1. */
+int P_try(int semid, int index) {
+	int status = PV(semid, index, -1, IPC_NOWAIT);
+	if (status < 0) {
+		if (errno == EAGAIN) return 1;
+		else perror("libthrd.P_try");
+	}
+	return status;
 }
 
 /* Free resource */
-void V(int semid, int index) {
-	if (PV(semid, index, 1) < 0) perror ("libthrd.V");
+int V(int semid, int index) {
+	int status = PV(semid, index, 1, 0);
+	if (status < 0) perror("libthrd.V");
+	return status;
 }
 
 
 /* ----------- */
 /*   Threads   */
 /* ----------- */
-void* lanceFunction(void *arg) {
-	/* Copie de l'argument */
-	Parameters *funcParameters = arg;
-	/* Appel de la fonction avec l'argument dans la structure */
-	funcParameters->fonction(funcParameters->argument);
-	/* Liberation de la memoire */
-	free(funcParameters->argument);
-	free(funcParameters);
-
+static void* startTask(void *arg) {
+	/* Make a local save of the argument */
+	TaskInfo* task = (TaskInfo*)arg;
+	/* Call the function */
+	task->function(task->argument);
+	/* Task is over, free memory */
+	free(task->argument);
+	free(task);
 	livingThreads--;
 	#ifdef DEBUG
 		fprintf(stderr, "Thread terminated, %d remaining\n", livingThreads);
 	#endif
-
 	pthread_exit(NULL);
 }
 
-
 /* Returns 0 on success, negative integer if failed */
-int lanceThread(void (*func)(void *), void *arg, int size) {
+int startThread(void (*func)(void *), void *arg, int size) {
+	pthread_attr_t attr;
+	pthread_t tid;
+	TaskInfo* task;
+
 	#ifdef MAX_THREADS
-		if (livingThreads == MAX_THREADS) {
-			//#ifdef DEBUG
-				fprintf(stderr, "lanceThread.thread_limit: error");
-			//#endif
+		if (livingThreads >= MAX_THREADS) {
+			fprintf(stderr, "startThread.thread_limit: error");
 			return -5;
 		}
 	#endif
 
-	Parameters* funcParameters = (Parameters*) malloc(sizeof(Parameters));
-	if (funcParameters == NULL) {
-		perror("lanceThread.funcParameters.malloc"); return -1;
+	/* Save the task info for the thread */
+	task = (TaskInfo*) malloc(sizeof(TaskInfo));
+	if (task == NULL) { perror("startThread.task.malloc"); return -1; }
+	task->function = func;
+	if ((task->argument = malloc(size)) == NULL) {
+		perror("startThread.task.argument.malloc"); return -2;
 	}
+	memcpy(task->argument, arg, (size_t)size);
 
-	funcParameters->fonction = func;
-	if ((funcParameters->argument = malloc(size)) == NULL) {
-		perror("lanceThread.funcParameters.argument.malloc"); return -2;
-	}
-	memcpy(funcParameters->argument, arg, (size_t)size);
-
-	pthread_attr_t attr;
-	pthread_t tid;
+	/* Start the thread */
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	if (pthread_create(&tid, &attr, lanceFunction, funcParameters) != 0) {
-		perror("lanceThread.pthread_create"); return -3;
+	if (pthread_create(&tid, &attr, startTask, task) != 0) {
+		perror("startThread.pthread_create"); return -3;
 	}
 
 	livingThreads++;

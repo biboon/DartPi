@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
 
 	for (i = 1; i < threads; i++) {
 		params[1] = i;
-		lanceThread(loop, params, 2 * sizeof(unsigned long));
+		startThread(loop, params, 2 * sizeof(unsigned long));
 	}
 
 	params[1] = 0;
