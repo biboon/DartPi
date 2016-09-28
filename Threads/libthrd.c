@@ -93,8 +93,7 @@ int get_mutex(int semid, int index) {
    index, act and flg. */
 int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops) {
 	int i;
-	struct sembuf *ops = (struct sembuf *) malloc(nops * sizeof(struct sembuf));
-	if (ops == NULL) { perror("libthrd.PV.malloc"); return -1; }
+	struct sembuf ops[nops];
 
 	for (i = 0; i < nops; ++i) {
 		ops[i].sem_num = index[i];
@@ -102,7 +101,6 @@ int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops) {
 		ops[i].sem_flg = flg[i];
 	}
 	i = semop(semid, ops, nops);
-	free(ops);
 	return i;
 }
 
