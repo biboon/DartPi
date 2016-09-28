@@ -93,7 +93,9 @@ int get_mutex(int semid, int index) {
 	return status;
 }
 
-/* Main function to request/free the resource */
+/* Simplified call to semop.
+   Requests the semaphore semid to proceed nops operation described by the arrays
+   index, act and flg. */
 int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops) {
 	int i;
 	struct sembuf *ops = (struct sembuf *) malloc(nops * sizeof(struct sembuf));
@@ -109,12 +111,17 @@ int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops) {
 	return i;
 }
 
+int PV_one(int semid, unsigned short index, short act, short flg) {
+	unsigned short _index = index;
+	short _act = act, _flg = flg;
+	int status = PV(semid, &_index, &_act, &_flg, 1);
+	return status;
+}
+
 /* Request resource to the semaphore and set the calling thread to sleep if
    it is not yet available. Thread resumes when resource is given. */
 int P(int semid, unsigned short index) {
-	unsigned short _index = index;
-	short act = -1, flg = 0;
-	int status = PV(semid, &_index, &act, &flg, 1);
+	int status = PV_one(semid, index, -1, 0);
 	if (status < 0) perror("libthrd.P");
 	return status;
 }
@@ -122,9 +129,7 @@ int P(int semid, unsigned short index) {
 /* Tries a request to the semaphore and returns immediately. 0 if the lock
    succeeded, 1 if the mutex could not be locked because it already was, or -1. */
 int P_try(int semid, unsigned short index) {
-	unsigned short _index = index;
-	short act = -1, flg = IPC_NOWAIT;
-	int status = PV(semid, &_index, &act, &flg, 1);
+	int status = PV_one(semid, index, -1, IPC_NOWAIT);
 	if (status < 0) {
 		if (errno == EAGAIN) return 1;
 		else perror("libthrd.P_try");
@@ -134,9 +139,7 @@ int P_try(int semid, unsigned short index) {
 
 /* Free resource */
 int V(int semid, unsigned short index) {
-	unsigned short _index = index;
-	short act = 1, flg = 0;
-	int status = PV(semid, &_index, &act, &flg, 1);
+	int status = PV_one(semid, index, 1, 0);
 	if (status < 0) perror("libthrd.V");
 	return status;
 }

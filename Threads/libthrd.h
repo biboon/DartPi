@@ -13,6 +13,7 @@ int initMutexes(int nb, unsigned short val);
 int set_mutex(int semid, int index, unsigned short val);
 int get_mutex(int semid, int index);
 int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops);
+int PV_one(int semid, unsigned short index, short act, short flg);
 int P(int semid, unsigned short index);
 int P_try(int semid, unsigned short index);
 int V(int semid, unsigned short index);
