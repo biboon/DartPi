@@ -36,9 +36,10 @@ typedef struct {
 /* Requests a semaphore with R/W of nb elements */
 static int sem_alloc(int nb) {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
-	if (semid < 0) { perror("libthrd.sem_alloc.semget"); exit(EXIT_FAILURE); }
+	if (semid < 0) perror("libthrd.sem_alloc.semget");
 	#ifdef DEBUG
-		printf("Created semaphore #%d of %d mutexes\n", semid, nb);
+		else
+			printf("Created semaphore #%d of %d mutexes\n", semid, nb);
 	#endif
 	return semid;
 }
@@ -63,7 +64,7 @@ static int sem_init(int semid, int nb, unsigned short val) {
 	memset(values, val, nb * sizeof(unsigned short));
 	argument.array = values;
 	status = semctl (semid, 0, SETALL, argument);
-	if (status < 0) { perror("libthrd.sem_init.semctl"); exit(EXIT_FAILURE); }
+	if (status < 0) perror("libthrd.sem_init.semctl");
 	return status;
 }
 
@@ -81,38 +82,49 @@ int set_mutex(int semid, int index, unsigned short val) {
 
 	argument.val = val;
 	status = semctl(semid, index, SETVAL, argument);
-	if (status < 0) { perror("libthrd.set_mutex.semctl"); exit(EXIT_FAILURE); }
+	if (status < 0) perror("libthrd.set_mutex.semctl");
 	return status;
 }
 
 /* Gets the value of semval of the index-th mutex of semaphore semid */
 int get_mutex(int semid, int index) {
 	int status = semctl(semid, index, GETVAL);
-	if (status < 0) { perror("libthrd.set_mutex.semctl"); exit(EXIT_FAILURE); }
+	if (status < 0) perror("libthrd.get_mutex.semctl");
 	return status;
 }
 
 /* Main function to request/free the resource */
-int PV(int semid, unsigned short index, short act, short flg) {
-	struct sembuf op;
-	op.sem_num = index;
-	op.sem_op = act; /* P = -1; V = 1 */
-	op.sem_flg = flg;
-	return semop(semid, &op, 1);
+int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops) {
+	int i;
+	struct sembuf *ops = (struct sembuf *) malloc(nops * sizeof(struct sembuf));
+	if (ops == NULL) { perror("libthrd.PV.malloc"); return -1; }
+
+	for (i = 0; i < nops; ++i) {
+		ops[i].sem_num = index[i];
+		ops[i].sem_op = act[i]; /* P = -1; V = 1 */
+		ops[i].sem_flg = flg[i];
+	}
+	i = semop(semid, ops, nops);
+	free(ops);
+	return i;
 }
 
 /* Request resource to the semaphore and set the calling thread to sleep if
    it is not yet available. Thread resumes when resource is given. */
-int P(int semid, int index) {
-	int status = PV(semid, index, -1, 0);
+int P(int semid, unsigned short index) {
+	unsigned short _index = index;
+	short act = -1, flg = 0;
+	int status = PV(semid, &_index, &act, &flg, 1);
 	if (status < 0) perror("libthrd.P");
 	return status;
 }
 
 /* Tries a request to the semaphore and returns immediately. 0 if the lock
    succeeded, 1 if the mutex could not be locked because it already was, or -1. */
-int P_try(int semid, int index) {
-	int status = PV(semid, index, -1, IPC_NOWAIT);
+int P_try(int semid, unsigned short index) {
+	unsigned short _index = index;
+	short act = -1, flg = IPC_NOWAIT;
+	int status = PV(semid, &_index, &act, &flg, 1);
 	if (status < 0) {
 		if (errno == EAGAIN) return 1;
 		else perror("libthrd.P_try");
@@ -121,8 +133,10 @@ int P_try(int semid, int index) {
 }
 
 /* Free resource */
-int V(int semid, int index) {
-	int status = PV(semid, index, 1, 0);
+int V(int semid, unsigned short index) {
+	unsigned short _index = index;
+	short act = 1, flg = 0;
+	int status = PV(semid, &_index, &act, &flg, 1);
 	if (status < 0) perror("libthrd.V");
 	return status;
 }
@@ -147,7 +161,7 @@ static void* startTask(void *arg) {
 }
 
 /* Returns 0 on success, negative integer if failed */
-int startThread(void (*func)(void *), void *arg, int size) {
+int startThread(void (*func)(void *), void *arg, size_t size) {
 	pthread_attr_t attr;
 	pthread_t tid;
 	TaskInfo* task;
@@ -163,9 +177,8 @@ int startThread(void (*func)(void *), void *arg, int size) {
 	task = (TaskInfo*) malloc(sizeof(TaskInfo));
 	if (task == NULL) { perror("startThread.task.malloc"); return -1; }
 	task->function = func;
-	if ((task->argument = malloc(size)) == NULL) {
-		perror("startThread.task.argument.malloc"); return -2;
-	}
+	task->argument = malloc(size);
+	if (task->argument == NULL) { perror("startThread.task.argument.malloc"); return -2; }
 	memcpy(task->argument, arg, (size_t)size);
 
 	/* Start the thread */
