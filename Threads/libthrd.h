@@ -1,11 +1,9 @@
 #ifndef __LIBTHRD_H__
 #define __LIBTHRD_H__
 
-extern int livingThreads;
-
 /* Threads */
-int startThread(void (*func)(void *), void *arg, size_t size);
-int getLivingThreads();
+int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size);
+int waitThread(pthread_t thread);
 
 /* Mutexes */
 int sem_free(int semid);

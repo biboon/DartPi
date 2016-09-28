@@ -12,10 +12,6 @@
 
 #include "libthrd.h"
 
-//#define MAX_THREADS 12
-
-/* Global variables */
-int livingThreads = 0;
 
 union semun {
 	int val;
@@ -79,7 +75,6 @@ int initMutexes(int nb, unsigned short val) {
 int set_mutex(int semid, int index, unsigned short val) {
 	int status;
 	union semun argument;
-
 	argument.val = val;
 	status = semctl(semid, index, SETVAL, argument);
 	if (status < 0) perror("libthrd.set_mutex.semctl");
@@ -156,16 +151,12 @@ static void* startTask(void *arg) {
 	/* Task is over, free memory */
 	free(task->argument);
 	free(task);
-	livingThreads--;
-	#ifdef DEBUG
-		fprintf(stderr, "Thread terminated, %d remaining\n", livingThreads);
-	#endif
+
 	pthread_exit(NULL);
 }
 
 /* Returns 0 on success, negative integer if failed */
-int startThread(void (*func)(void *), void *arg, size_t size) {
-	pthread_attr_t attr;
+int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size) {
 	pthread_t tid;
 	TaskInfo* task;
 
@@ -185,15 +176,16 @@ int startThread(void (*func)(void *), void *arg, size_t size) {
 	memcpy(task->argument, arg, (size_t)size);
 
 	/* Start the thread */
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	if (pthread_create(&tid, &attr, startTask, task) != 0) {
+	if (pthread_create(&tid, NULL, startTask, task) != 0) {
 		perror("startThread.pthread_create"); return -3;
 	}
 
-	livingThreads++;
-	#ifdef DEBUG
-		printf("Thread started, %d running\n", livingThreads);
-	#endif
+	*thread = tid;
 	return 0;
+}
+
+int waitThread(pthread_t thread) {
+	int status = pthread_join(thread, NULL);
+	if (status != 0) perror("libthrd.waitThread");
+	return status;
 }

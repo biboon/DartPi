@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 #include <libthrd.h>
 
@@ -26,13 +27,15 @@ int main(int argc, char** argv) {
 	unsigned long shots = 0, threads = 0, tothits = 0, params[2], i = 0;
 	clock_t start, end;
 	struct timeval tstart, tend;
+
 	if (argc < 3) {
 		printf("Usage: %s shots threads\n", argv[0]);
 		return -1;
 	}
-
 	shots = strtol(argv[1], NULL, 10);
 	threads = strtol(argv[2], NULL, 10);
+
+	pthread_t tids[threads - 1];
 	hits = (unsigned long*) calloc(threads, sizeof(unsigned long));
 	params[0] = shots / threads;
 	shots = params[0] * threads;
@@ -45,14 +48,14 @@ int main(int argc, char** argv) {
 
 	for (i = 1; i < threads; i++) {
 		params[1] = i;
-		startThread(loop, params, 2 * sizeof(unsigned long));
+		startThread(tids + i - 1, loop, (void*)params, 2 * sizeof(unsigned long));
 	}
 
 	params[1] = 0;
 	loop(params);
 
 	// Wait until each thread returns
-	while (livingThreads > 0);
+	for (i = 1; i < threads; i++) waitThread(tids[i - 1]);
 
 	for (i = 0; i < threads; i++) tothits += hits[i];
 	long double pi = (long double)(tothits << 2)/(long double)shots;
