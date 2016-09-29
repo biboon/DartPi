@@ -90,6 +90,7 @@ int main(int argc, char** argv) {
 
 	/* Wait until each thread returns */
 	for (i = 1; i < threads; i++) waitThread(workers[i].tid);
+	sem_free(semid);
 
 	/* See results */
 	for (i = 0; i < threads; i++) {
