@@ -13,36 +13,32 @@ typedef struct {
 	pthread_t tid;
 	int id;
 	unsigned long shot, hit, step, *remaining;
-	int *semid;
-} WorkerInfo;
+	int semid;
+} WorkerInfo_t;
 
 
 
 void loop(void* params) {
-	WorkerInfo *worker = (WorkerInfo *) params;
+	WorkerInfo_t *worker = *(WorkerInfo_t **)params;
 	unsigned long todo;
 	struct drand48_data buffer;
 	double x, y;
 	srand48_r(time(NULL) * (1 + worker->id), &buffer);
 
-	P(*(worker->semid), 0);
+	P(worker->semid, 0);
 	while (*(worker->remaining)) {
 		todo = (*(worker->remaining) >= worker->step) ? worker->step : *(worker->remaining);
 		*(worker->remaining) -= todo;
-		V(*(worker->semid), 0);
+		V(worker->semid, 0);
 		worker->shot += todo;
 		for ( ; todo > 0; --todo) {
 			drand48_r(&buffer, &x);
 			drand48_r(&buffer, &y);
 			if ((x*x + y*y) < 1) (worker->hit)++;
 		}
-		P(*(worker->semid), 0);
+		P(worker->semid, 0);
 	}
-	V(*(worker->semid), 0);
-
-	#ifdef DEBUG
-		printf("%d: %ld shots for %ld hits\n", worker->id, worker->shot, worker->hit);
-	#endif
+	V(worker->semid, 0);
 }
 
 
@@ -64,8 +60,8 @@ int main(int argc, char** argv) {
 	remaining = strtol(argv[1], NULL, 10);
 	threads = strtol(argv[2], NULL, 10);
 	step = remaining / threads / 20;
-	WorkerInfo workers[threads];
-	memset(workers, 0, threads * sizeof(WorkerInfo));
+	WorkerInfo_t workers[threads];
+	memset(workers, 0, threads * sizeof(WorkerInfo_t));
 	semid = initMutexes(1, 1);
 	printf("Starting with %ld shots and %ld threads\n", remaining, threads);
 
@@ -73,20 +69,22 @@ int main(int argc, char** argv) {
 	gettimeofday(&tstart, NULL);
 
 	/* Start all the workers */
+	WorkerInfo_t *_worker;
 	for (i = 1; i < threads; i++) {
-		workers[i].id = i;
-		workers[i].remaining = &remaining;
-		workers[i].step = step;
-		workers[i].semid = &semid;
-		startThread(&workers[i].tid, loop, workers + i, sizeof(WorkerInfo));
+		_worker = workers + i;
+		_worker->id = i;
+		_worker->remaining = &remaining;
+		_worker->step = step;
+		_worker->semid = semid;
+		startThread(&(_worker->tid), loop, &_worker, sizeof(WorkerInfo_t *));
 	}
 
 	/* Start the work for the main thread */
-	//workers[0].id = 0; // Should not be necessary since we used memset
-	workers[0].remaining = &remaining;
-	workers[0].step = step;
-	workers[0].semid = &semid;
-	loop(workers);
+	_worker = workers;
+	_worker->remaining = &remaining;
+	_worker->step = step;
+	_worker->semid = semid;
+	loop(&_worker);
 
 	/* Wait until each thread returns */
 	for (i = 1; i < threads; i++) waitThread(workers[i].tid);
@@ -100,6 +98,11 @@ int main(int argc, char** argv) {
 	long double pi = (long double)(tothits * 4)/(long double)totshots;
 	end = clock();
 	gettimeofday(&tend, NULL);
+
+	#ifdef DEBUG
+		for (i = 0; i < threads; i++)
+			printf("%d: %ld shots for %ld hits\n", workers[i].id, workers[i].shot, workers[i].hit);
+	#endif
 
 	/* Display results */
 	printf("Pi is %.12Lf\n\n", pi);

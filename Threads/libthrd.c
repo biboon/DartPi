@@ -23,7 +23,7 @@ union semun {
 typedef struct {
 	void (*function)(void*);
 	void *argument;
-} TaskInfo;
+} TaskInfo_t;
 
 
 /* ---------- */
@@ -141,22 +141,19 @@ int V(int semid, unsigned short index) {
 /* ----------- */
 /*   Threads   */
 /* ----------- */
-static void* startTask(void *arg) {
-	/* Make a local save of the argument */
-	TaskInfo* task = (TaskInfo*)arg;
+static void *startTask(void *arg) {
 	/* Call the function */
-	task->function(task->argument);
+	((TaskInfo_t*)arg)->function(((TaskInfo_t*)arg)->argument);
 	/* Task is over, free memory */
-	free(task->argument);
-	free(task);
-
+	free(((TaskInfo_t*)arg)->argument);
+	free(((TaskInfo_t*)arg));
 	pthread_exit(NULL);
 }
 
 /* Returns 0 on success, negative integer if failed */
 int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size) {
 	pthread_t tid;
-	TaskInfo* task;
+	TaskInfo_t* task;
 
 	#ifdef MAX_THREADS
 		if (livingThreads >= MAX_THREADS) {
@@ -166,7 +163,7 @@ int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
 	#endif
 
 	/* Save the task info for the thread */
-	task = (TaskInfo*) malloc(sizeof(TaskInfo));
+	task = (TaskInfo_t*) malloc(sizeof(TaskInfo_t));
 	if (task == NULL) { perror("startThread.task.malloc"); return -1; }
 	task->function = func;
 	task->argument = malloc(size);
