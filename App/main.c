@@ -8,6 +8,7 @@
 
 #include <libthrd.h>
 
+#define PI 3.141592653589793
 
 typedef struct {
 	pthread_t tid;
@@ -22,6 +23,7 @@ int hash(void *ptr, size_t size) {
 	for ( ; i != 0; --i) res ^= *(unsigned char*)(ptr + i);
 	return res;
 }
+
 
 void loop(void* params) {
 	WorkerInfo_t *worker = *(WorkerInfo_t **)params;
@@ -39,7 +41,7 @@ void loop(void* params) {
 		for ( ; todo > 0; --todo) {
 			drand48_r(&buffer, &x);
 			drand48_r(&buffer, &y);
-			if ((x*x + y*y) < 1) (worker->hit)++;
+			if ((x*x + y*y) <= 1.0) (worker->hit)++;
 		}
 		P(worker->semid, 0);
 	}
@@ -110,7 +112,7 @@ int main(int argc, char** argv) {
 	#endif
 
 	/* Display results */
-	printf("Pi is %.12Lf\n\n", pi);
+	printf("Pi is %.15Lf, err is %.15Lf\n\n", pi, pi - PI);
 	printf("CPU time: %f s\n", (double)(end - start)/CLOCKS_PER_SEC);
 	printf("Real time: %f s\n", (double)(tend.tv_usec - tstart.tv_usec)/1e6 + (double)(tend.tv_sec - tstart.tv_sec));
 
