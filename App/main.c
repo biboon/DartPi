@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <time.h>
 #include <string.h>
+#include <time.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
@@ -17,13 +17,18 @@ typedef struct {
 } WorkerInfo_t;
 
 
+int hash(void *ptr, size_t size) {
+	int i = size - 1, res = 0;
+	for ( ; i != 0; --i) res ^= *(unsigned char*)(ptr + i);
+	return res;
+}
 
 void loop(void* params) {
 	WorkerInfo_t *worker = *(WorkerInfo_t **)params;
 	unsigned long todo;
 	struct drand48_data buffer;
 	double x, y;
-	srand48_r(time(NULL) * (1 + worker->id), &buffer);
+	srand48_r(time(NULL) * hash(worker, sizeof(WorkerInfo_t)), &buffer);
 
 	P(worker->semid, 0);
 	while (*(worker->remaining)) {
