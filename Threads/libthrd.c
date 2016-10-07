@@ -141,14 +141,17 @@ int V(int semid, unsigned short index) {
 /* ----------- */
 /*   Threads   */
 /* ----------- */
-static void *startTask(void *arg) {
+static void *startTask(void *task) {
+	/* Make a local save of the argument */
+	TaskInfo_t *_task = (TaskInfo_t *)task;
 	/* Call the function */
-	((TaskInfo_t*)arg)->function(((TaskInfo_t*)arg)->argument);
+	_task->function(_task->argument);
 	/* Task is over, free memory */
-	free(((TaskInfo_t*)arg)->argument);
-	free(((TaskInfo_t*)arg));
+	free(_task->argument);
+	free(_task);
 	pthread_exit(NULL);
 }
+
 
 /* Returns 0 on success, negative integer if failed */
 int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size) {
