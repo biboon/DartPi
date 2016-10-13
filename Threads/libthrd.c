@@ -1,9 +1,9 @@
 /* Ce fichier contient des fonctions de thread */
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <pthread.h>
 #include <string.h>
+#include <signal.h>
 #include <errno.h>
 
 #include <sys/ipc.h>
@@ -33,7 +33,7 @@ typedef struct {
 static int sem_alloc(int nb) {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
 	if (semid < 0) perror("libthrd.sem_alloc.semget");
-	#ifdef DEBUG
+	#ifdef VERBOSE
 		else
 			printf("Created semaphore #%d of %d mutexes\n", semid, nb);
 	#endif
@@ -42,7 +42,7 @@ static int sem_alloc(int nb) {
 
 /* Frees the semaphore */
 int sem_free(int semid) {
-	#ifdef DEBUG
+	#ifdef VERBOSE
 		printf("Freeing the semaphore\n");
 	#endif
 	int status = semctl(semid, 0, IPC_RMID);
@@ -115,7 +115,7 @@ int PV_one(int semid, unsigned short index, short act, short flg) {
    it is not yet available. Thread resumes when resource is given. */
 int P(int semid, unsigned short index) {
 	int status = PV_one(semid, index, -1, 0);
-	if (status < 0) perror("libthrd.P");
+	if (status < 0 && errno != EINTR) perror("libthrd.P");
 	return status;
 }
 
@@ -182,7 +182,19 @@ int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
 	return 0;
 }
 
+int killThread(pthread_t thread, int _signal) {
+	#ifdef VERBOSE
+		printf("Killing thread with signal %d\n", _signal);
+	#endif
+	int status = pthread_kill(thread, _signal);
+	if (status != 0) perror("libthrd.killThread");
+	return status;
+}
+
 int waitThread(pthread_t thread) {
+	#ifdef VERBOSE
+		printf("Waiting thread\n");
+	#endif
 	int status = pthread_join(thread, NULL);
 	if (status != 0) perror("libthrd.waitThread");
 	return status;

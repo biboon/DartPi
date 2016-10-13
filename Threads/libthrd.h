@@ -4,6 +4,7 @@
 /* Threads */
 int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size);
 int waitThread(pthread_t thread);
+int killThread(pthread_t thread, int _signal);
 
 /* Mutexes */
 int sem_free(int semid);
