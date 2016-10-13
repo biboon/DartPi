@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
 	end = clock();
 	gettimeofday(&tend, NULL);
 
-	#ifdef DEBUG
+	#ifdef VERBOSE
 		for (i = 0; i < threads; i++)
 			printf("%d: %ld shots for %ld hits\n", workers[i].id, workers[i].shot, workers[i].hit);
 	#endif

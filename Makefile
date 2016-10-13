@@ -22,5 +22,8 @@ $(patsubst %,_clean_%,$(DIRS)):
 	cd $(patsubst _clean_%,%,$@) && make clean
 
 # Compilation en mode debug
+verbose: CFLAGS += -DVERBOSE
+verbose: all
+
 debug: CFLAGS += -DDEBUG -g
-debug: $(patsubst %, _dir_%, $(DIRS))
+debug: verbose
