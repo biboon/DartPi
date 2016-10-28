@@ -71,50 +71,18 @@ int initMutexes(int nb, unsigned short val) {
 	return semid;
 }
 
-/* Sets the index-th mutex of semaphore semid at the value val */
-int set_mutex(int semid, int index, unsigned short val) {
-	int status;
-	union semun argument;
-	argument.val = val;
-	status = semctl(semid, index, SETVAL, argument);
-	if (status < 0) perror("libthrd.set_mutex.semctl");
-	return status;
-}
-
-/* Gets the value of semval of the index-th mutex of semaphore semid */
-int get_mutex(int semid, int index) {
-	int status = semctl(semid, index, GETVAL);
-	if (status < 0) perror("libthrd.get_mutex.semctl");
-	return status;
-}
-
 /* Simplified call to semop.
-   Requests the semaphore semid to proceed nops operation described by the arrays
-   index, act and flg. */
-int PV(int semid, unsigned short* index, short* act, short* flg, size_t nops) {
-	int i;
-	struct sembuf ops[nops];
-
-	for (i = 0; i < nops; ++i) {
-		ops[i].sem_num = index[i];
-		ops[i].sem_op = act[i]; /* P = -1; V = 1 */
-		ops[i].sem_flg = flg[i];
-	}
-	i = semop(semid, ops, nops);
-	return i;
-}
-
-int PV_one(int semid, unsigned short index, short act, short flg) {
-	unsigned short _index = index;
-	short _act = act, _flg = flg;
-	int status = PV(semid, &_index, &_act, &_flg, 1);
-	return status;
+   Requests the semaphore semid to proceed nops operation described by
+	index, act and flg. */
+static inline int PV(int semid, unsigned short index, short act, short flg) {
+	struct sembuf ops = { .sem_num = index, .sem_op = act, .sem_flg = flg };
+	return semop(semid, &ops, 1);
 }
 
 /* Request resource to the semaphore and set the calling thread to sleep if
    it is not yet available. Thread resumes when resource is given. */
 int P(int semid, unsigned short index) {
-	int status = PV_one(semid, index, -1, 0);
+	int status = PV(semid, index, -1, 0);
 	if (status < 0 && errno != EINTR) perror("libthrd.P");
 	return status;
 }
@@ -122,7 +90,7 @@ int P(int semid, unsigned short index) {
 /* Tries a request to the semaphore and returns immediately. 0 if the lock
    succeeded, 1 if the mutex could not be locked because it already was, or -1. */
 int P_try(int semid, unsigned short index) {
-	int status = PV_one(semid, index, -1, IPC_NOWAIT);
+	int status = PV(semid, index, -1, IPC_NOWAIT);
 	if (status < 0) {
 		if (errno == EAGAIN) return 1;
 		else perror("libthrd.P_try");
@@ -132,7 +100,7 @@ int P_try(int semid, unsigned short index) {
 
 /* Free resource */
 int V(int semid, unsigned short index) {
-	int status = PV_one(semid, index, 1, 0);
+	int status = PV(semid, index, 1, 0);
 	if (status < 0) perror("libthrd.V");
 	return status;
 }
