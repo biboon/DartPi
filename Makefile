@@ -1,29 +1,28 @@
-# Makefile général
-# Constantes pour la compilation des programmes
+# Global Makefile
 export APP = main
 export CC = gcc
 export AR = ar
 export CFLAGS = -Wall
 
-
-# Dossiers du projet
+# Directories
 DIRS=Threads App
 
-# La cible generale
+# Main rule
+all: CFLAGS += -O2
 all: $(patsubst %, _dir_%, $(DIRS))
 
 $(patsubst %,_dir_%,$(DIRS)):
 	cd $(patsubst _dir_%,%,$@) && make
 
-# La cible de nettoyage
-clean: $(patsubst %, _clean_%, $(DIRS))
-
 $(patsubst %,_clean_%,$(DIRS)):
 	cd $(patsubst _clean_%,%,$@) && make clean
 
-# Compilation en mode debug
+# Debug mode compilation
 verbose: CFLAGS += -DVERBOSE
-verbose: all
+verbose: $(patsubst %, _dir_%, $(DIRS))
 
 debug: CFLAGS += -DDEBUG -g
 debug: verbose
+
+# Cleaning
+clean: $(patsubst %, _clean_%, $(DIRS))

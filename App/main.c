@@ -24,6 +24,10 @@ int hash(void *ptr, size_t size) {
 	return res;
 }
 
+static inline double module(double x, double y) {
+	return x*x + y*y;
+}
+
 
 void loop(void* params) {
 	WorkerInfo_t *worker = *(WorkerInfo_t **)params;
@@ -41,7 +45,7 @@ void loop(void* params) {
 		for ( ; todo > 0; --todo) {
 			drand48_r(&buffer, &x);
 			drand48_r(&buffer, &y);
-			if ((x*x + y*y) <= 1.0) (worker->hit)++;
+			if (module(x, y) <= 1.0) (worker->hit)++;
 		}
 		P(worker->semid, 0);
 	}
