@@ -2,7 +2,7 @@
 export APP = main
 export CC = gcc
 export AR = ar
-export CFLAGS = -Wall
+export CFLAGS = -Wall -std=c11 -D_XOPEN_SOURCE=700 -D_SVID_SOURCE
 
 # Directories
 DIRS=Threads App
