@@ -33,7 +33,7 @@ typedef struct {
 static int sem_alloc(int nb) {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
 	if (semid < 0) perror("libthrd.sem_alloc.semget");
-	#ifdef VERBOSE
+	#ifdef DEBUG
 		else
 			printf("Created semaphore #%d of %d mutexes\n", semid, nb);
 	#endif
@@ -42,7 +42,7 @@ static int sem_alloc(int nb) {
 
 /* Frees the semaphore */
 int sem_free(int semid) {
-	#ifdef VERBOSE
+	#ifdef DEBUG
 		printf("Freeing the semaphore\n");
 	#endif
 	int status = semctl(semid, 0, IPC_RMID);
@@ -85,19 +85,23 @@ int P(int semid, unsigned short index) {
 #include <time.h>
 
 /* Same as P but waits at most nanos nanoseconds.
-   Returns 0 if the lock was performed or -1 if it did not. */
+   Returns 0 if the lock was performed or 1 if it did not.
+	-1 on error. */
 int P_timed(int semid, unsigned short index, long nanos) {
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
 	struct timespec timeout = { .tv_sec = 0, .tv_nsec = nanos };
 	int status = semtimedop(semid, &ops, 1, &timeout);
-	if (status < 0 && errno != EINTR) perror("libthrd.P_timed");
+	if (status < 0) {
+		if (errno == EAGAIN) return 1;
+		else if (errno != EINTR) perror("libthrd.P_timed");
+	}
 	return status;
 }
 
 #endif
 
 /* Same as P but doesn't block. Returns 0 if the lock was performed or
-   -1 if it did not. */
+   1 if it did not. -1 on error. */
 int P_nowait(int semid, unsigned short index) {
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = IPC_NOWAIT };
 	int status = semop(semid, &ops, 1);
@@ -162,7 +166,7 @@ int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
 }
 
 int killThread(pthread_t thread, int _signal) {
-	#ifdef VERBOSE
+	#ifdef DEBUG
 		printf("Killing thread with signal %d\n", _signal);
 	#endif
 	int status = pthread_kill(thread, _signal);
@@ -171,7 +175,7 @@ int killThread(pthread_t thread, int _signal) {
 }
 
 int waitThread(pthread_t thread) {
-	#ifdef VERBOSE
+	#ifdef DEBUG
 		printf("Waiting thread\n");
 	#endif
 	int status = pthread_join(thread, NULL);
