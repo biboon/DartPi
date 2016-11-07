@@ -50,14 +50,15 @@ int sem_free(int semid) {
 	return status;
 }
 
-/* Initiates the semaphore at value val */
+/* Initializes the semaphore at value val */
 static int sem_init(int semid, int nb, unsigned short val) {
 	int status;
+	unsigned i;
 	union semun argument;
 	unsigned short values[nb];
 
 	/* Initializing semaphore values to val */
-	memset(values, val, nb * sizeof(unsigned short));
+	for (i = 0; i < nb; ++i) values[i] = val;
 	argument.array = values;
 	status = semctl (semid, 0, SETALL, argument);
 	if (status < 0) perror("libthrd.sem_init.semctl");
