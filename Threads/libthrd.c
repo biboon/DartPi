@@ -146,7 +146,7 @@ int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
 		perror("startThread.pthread_create"); return -3;
 	}
 
-	*thread = tid;
+	if (thread != NULL) *thread = tid;
 	return 0;
 }
 
