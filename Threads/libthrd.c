@@ -72,26 +72,35 @@ int initMutexes(int nb, unsigned short val) {
 	return semid;
 }
 
-/* Simplified call to semop.
-   Requests the semaphore semid to proceed nops operation described by
-	index, act and flg. */
-static inline int PV(int semid, unsigned short index, short act, short flg) {
-	struct sembuf ops = { .sem_num = index, .sem_op = act, .sem_flg = flg };
-	return semop(semid, &ops, 1);
-}
-
 /* Request resource to the semaphore and set the calling thread to sleep if
    it is not yet available. Thread resumes when resource is given. */
 int P(int semid, unsigned short index) {
-	int status = PV(semid, index, -1, 0);
+	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
+	int status = semop(semid, &ops, 1);
 	if (status < 0 && errno != EINTR) perror("libthrd.P");
 	return status;
 }
 
-/* Tries a request to the semaphore and returns immediately. 0 if the lock
-   succeeded, 1 if the mutex could not be locked because it already was, or -1. */
-int P_try(int semid, unsigned short index) {
-	int status = PV(semid, index, -1, IPC_NOWAIT);
+#ifdef _GNU_SOURCE
+#include <time.h>
+
+/* Same as P but waits at most nanos nanoseconds.
+   Returns 0 if the lock was performed or -1 if it did not. */
+int P_timed(int semid, unsigned short index, long nanos) {
+	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
+	struct timespec timeout = { .tv_sec = 0, .tv_nsec = nanos };
+	int status = semtimedop(semid, &ops, 1, &timeout);
+	if (status < 0 && errno != EINTR) perror("libthrd.P_timed");
+	return status;
+}
+
+#endif
+
+/* Same as P but doesn't block. Returns 0 if the lock was performed or
+   -1 if it did not. */
+int P_nowait(int semid, unsigned short index) {
+	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = IPC_NOWAIT };
+	int status = semop(semid, &ops, 1);
 	if (status < 0) {
 		if (errno == EAGAIN) return 1;
 		else perror("libthrd.P_try");
@@ -101,7 +110,8 @@ int P_try(int semid, unsigned short index) {
 
 /* Free resource */
 int V(int semid, unsigned short index) {
-	int status = PV(semid, index, 1, 0);
+	struct sembuf ops = { .sem_num = index, .sem_op = 1, .sem_flg = 0 };
+	int status = semop(semid, &ops, 1);
 	if (status < 0) perror("libthrd.V");
 	return status;
 }
