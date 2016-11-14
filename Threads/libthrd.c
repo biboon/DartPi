@@ -20,10 +20,10 @@ union semun {
 	struct seminfo *__buf;
 };
 
-typedef struct {
+struct taskinfo {
 	void (*function)(void*);
 	void *argument;
-} TaskInfo_t;
+};
 
 
 /* ---------- */
@@ -34,8 +34,8 @@ static int sem_alloc(int nb) {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
 	if (semid < 0) perror("libthrd.sem_alloc.semget");
 	#ifdef DEBUG
-		else
-			printf("Created semaphore #%d of %d mutexes\n", semid, nb);
+	else
+		printf("Created semaphore #%d of %d mutexes\n", semid, nb);
 	#endif
 	return semid;
 }
@@ -124,14 +124,14 @@ int V(int semid, unsigned short index) {
 /* ----------- */
 /*   Threads   */
 /* ----------- */
-static void *startTask(void *task) {
+static void *startTask(void *_task) {
 	/* Make a local save of the argument */
-	TaskInfo_t *_task = (TaskInfo_t *)task;
+	struct taskinfo *task = _task;
 	/* Call the function */
-	_task->function(_task->argument);
+	task->function(task->argument);
 	/* Task is over, free memory */
-	free(_task->argument);
-	free(_task);
+	free(task->argument);
+	free(task);
 	pthread_exit(NULL);
 }
 
@@ -139,29 +139,22 @@ static void *startTask(void *task) {
 /* Returns 0 on success, negative integer if failed */
 int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size) {
 	pthread_t tid;
-	TaskInfo_t* task;
-
-	#ifdef MAX_THREADS
-		if (livingThreads >= MAX_THREADS) {
-			fprintf(stderr, "startThread.thread_limit: error");
-			return -5;
-		}
-	#endif
+	struct taskinfo *task;
 
 	/* Save the task info for the thread */
-	task = (TaskInfo_t*) malloc(sizeof(TaskInfo_t));
+	task = malloc(sizeof(struct taskinfo));
 	if (task == NULL) { perror("startThread.task.malloc"); return -1; }
 	task->function = func;
 	task->argument = malloc(size);
 	if (task->argument == NULL) { perror("startThread.task.argument.malloc"); return -2; }
-	memcpy(task->argument, arg, (size_t)size);
+	memcpy(task->argument, arg, size);
 
 	/* Start the thread */
 	if (pthread_create(&tid, NULL, startTask, task) != 0) {
 		perror("startThread.pthread_create"); return -3;
 	}
-
 	if (thread != NULL) *thread = tid;
+
 	return 0;
 }
 
