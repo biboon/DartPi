@@ -30,7 +30,7 @@ struct taskinfo {
 /* Semaphores */
 /* ---------- */
 /* Requests a semaphore with R/W of nb elements */
-static int sem_alloc(int nb) {
+static inline int sem_alloc(int nb) {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
 	if (semid < 0) perror("libthrd.sem_alloc.semget");
 	#ifdef DEBUG
@@ -51,7 +51,7 @@ int sem_free(int semid) {
 }
 
 /* Initializes the semaphore at value val */
-static int sem_init(int semid, int nb, unsigned short val) {
+static inline int sem_init(int semid, int nb, unsigned short val) {
 	int status;
 	unsigned i;
 	union semun argument;
@@ -76,9 +76,9 @@ int initMutexes(int nb, unsigned short val) {
    it is not yet available. Thread resumes when resource is given. */
 int P(int semid, unsigned short index) {
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
-	int status = semop(semid, &ops, 1);
-	if (status < 0 && errno != EINTR) perror("libthrd.P");
-	return status;
+	if (0 == semop(semid, &ops, 1)) return 0;
+	if (errno != EINTR) perror("libthrd.P");
+	return -1;
 }
 
 #ifdef _GNU_SOURCE
@@ -90,12 +90,10 @@ int P(int semid, unsigned short index) {
 int P_timed(int semid, unsigned short index, long nanos) {
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
 	struct timespec timeout = { .tv_sec = 0, .tv_nsec = nanos };
-	int status = semtimedop(semid, &ops, 1, &timeout);
-	if (status < 0) {
-		if (errno == EAGAIN) return 1;
-		else if (errno != EINTR) perror("libthrd.P_timed");
-	}
-	return status;
+	if (0 == semtimedop(semid, &ops, 1, &timeout)) return 0;
+	if (errno == EAGAIN) return 1;
+	if (errno != EINTR) perror("libthrd.P_timed");
+	return -1;
 }
 
 #endif
@@ -104,20 +102,18 @@ int P_timed(int semid, unsigned short index, long nanos) {
    1 if it did not. -1 on error. */
 int P_nowait(int semid, unsigned short index) {
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = IPC_NOWAIT };
-	int status = semop(semid, &ops, 1);
-	if (status < 0) {
-		if (errno == EAGAIN) return 1;
-		else perror("libthrd.P_try");
-	}
-	return status;
+	if (0 == semop(semid, &ops, 1)) return 0;
+	if (errno == EAGAIN) return 1;
+	perror("libthrd.P_try");
+	return -1;
 }
 
 /* Free resource */
 int V(int semid, unsigned short index) {
 	struct sembuf ops = { .sem_num = index, .sem_op = 1, .sem_flg = 0 };
-	int status = semop(semid, &ops, 1);
-	if (status < 0) perror("libthrd.V");
-	return status;
+	if (0 == semop(semid, &ops, 1)) return 0;
+	perror("libthrd.V");
+	return -1;
 }
 
 
