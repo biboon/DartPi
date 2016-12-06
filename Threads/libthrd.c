@@ -32,12 +32,14 @@ struct taskinfo {
 /* Requests a semaphore with R/W of nb elements */
 static inline int sem_alloc(int nb) {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
-	if (semid < 0) perror("libthrd.sem_alloc.semget");
-	#ifdef DEBUG
-	else
+	if (semid != -1) {
+#ifdef DEBUG
 		printf("Created semaphore #%d of %d mutexes\n", semid, nb);
-	#endif
-	return semid;
+#endif
+		return semid;
+	}
+	perror("libthrd.sem_alloc.semget");
+	return -1;
 }
 
 /* Frees the semaphore */
@@ -45,14 +47,13 @@ int sem_free(int semid) {
 	#ifdef DEBUG
 		printf("Freeing the semaphore\n");
 	#endif
-	int status = semctl(semid, 0, IPC_RMID);
-	if (status < 0) perror("libthrd.sem_free.semctl");
-	return status;
+	if (0 == semctl(semid, 0, IPC_RMID)) return 0;
+	perror("libthrd.sem_free.semctl");
+	return -1;
 }
 
 /* Initializes the semaphore at value val */
 static inline int sem_init(int semid, int nb, unsigned short val) {
-	int status;
 	unsigned i;
 	union semun argument;
 	unsigned short values[nb];
@@ -60,9 +61,9 @@ static inline int sem_init(int semid, int nb, unsigned short val) {
 	/* Initializing semaphore values to val */
 	for (i = 0; i < nb; ++i) values[i] = val;
 	argument.array = values;
-	status = semctl (semid, 0, SETALL, argument);
-	if (status < 0) perror("libthrd.sem_init.semctl");
-	return status;
+	if (0 == semctl (semid, 0, SETALL, argument)) return 0;
+	perror("libthrd.sem_init.semctl");
+	return -1;
 }
 
 /* Inits a semaphore of nb elements at the value val */
@@ -121,7 +122,6 @@ int V(int semid, unsigned short index) {
 /*   Threads   */
 /* ----------- */
 static void *startTask(void *_task) {
-	/* Make a local save of the argument */
 	struct taskinfo *task = _task;
 	/* Call the function */
 	task->function(task->argument);
@@ -136,7 +136,6 @@ static void *startTask(void *_task) {
 int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size) {
 	pthread_t tid;
 	struct taskinfo *task;
-
 	/* Save the task info for the thread */
 	task = malloc(sizeof(struct taskinfo));
 	if (task == NULL) { perror("startThread.task.malloc"); return -1; }
@@ -144,30 +143,30 @@ int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
 	task->argument = malloc(size);
 	if (task->argument == NULL) { perror("startThread.task.argument.malloc"); return -2; }
 	memcpy(task->argument, arg, size);
-
 	/* Start the thread */
-	if (pthread_create(&tid, NULL, startTask, task) != 0) {
+	if (0 != pthread_create(&tid, NULL, startTask, task)) {
 		perror("startThread.pthread_create"); return -3;
 	}
 	if (thread != NULL) *thread = tid;
-
 	return 0;
 }
 
 int killThread(pthread_t thread, int _signal) {
-	#ifdef DEBUG
-		printf("Killing thread with signal %d\n", _signal);
-	#endif
+#ifdef DEBUG
+	printf("Killing thread with signal %d\n", _signal);
+#endif
 	int status = pthread_kill(thread, _signal);
-	if (status != 0) perror("libthrd.killThread");
-	return status;
+	if (status == 0) return 0;
+	fprintf(stderr, "libthrd.killThread: %s\n", strerror(status));
+	return -1;
 }
 
 int waitThread(pthread_t thread) {
-	#ifdef DEBUG
-		printf("Waiting thread\n");
-	#endif
+#ifdef DEBUG
+	printf("Waiting thread\n");
+#endif
 	int status = pthread_join(thread, NULL);
-	if (status != 0) perror("libthrd.waitThread");
-	return status;
+	if (status == 0) return 0;
+	fprintf(stderr, "libthrd.waitThread: %s\n", strerror(status));
+	return -1;
 }
