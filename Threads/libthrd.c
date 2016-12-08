@@ -20,7 +20,7 @@ union semun {
 	struct seminfo *__buf;
 };
 
-struct taskinfo {
+struct thrd_task_info {
 	void (*function)(void*);
 	void *argument;
 };
@@ -30,90 +30,94 @@ struct taskinfo {
 /* Semaphores */
 /* ---------- */
 /* Requests a semaphore with R/W of nb elements */
-static inline int sem_alloc(int nb) {
+static inline int thrd_semaphore_get(int nb)
+{
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
-	if (semid != -1) {
-#ifdef DEBUG
-		printf("Created semaphore #%d of %d mutexes\n", semid, nb);
-#endif
-		return semid;
-	}
-	perror("libthrd.sem_alloc.semget");
-	return -1;
-}
-
-/* Frees the semaphore */
-int sem_free(int semid) {
-	#ifdef DEBUG
-		printf("Freeing the semaphore\n");
-	#endif
-	if (0 == semctl(semid, 0, IPC_RMID)) return 0;
-	perror("libthrd.sem_free.semctl");
+	if (semid != -1) return semid;
+	perror("thrd_semaphore_get.semget");
 	return -1;
 }
 
 /* Initializes the semaphore at value val */
-static inline int sem_init(int semid, int nb, unsigned short val) {
+static inline int thrd_semaphore_set(int semid, int nb, unsigned short val)
+{
 	unsigned i;
-	union semun argument;
 	unsigned short values[nb];
-
 	/* Initializing semaphore values to val */
 	for (i = 0; i < nb; ++i) values[i] = val;
-	argument.array = values;
+	union semun argument = { .array = values };
 	if (0 == semctl (semid, 0, SETALL, argument)) return 0;
-	perror("libthrd.sem_init.semctl");
+	perror("thrd_semaphore_set.semctl");
 	return -1;
 }
 
-/* Inits a semaphore of nb elements at the value val */
-int initMutexes(int nb, unsigned short val) {
-	int semid = sem_alloc(nb);
-	sem_init(semid, nb, val);
-	return semid;
+/* Creates a semaphore of nb elements at the value val */
+int thrd_semaphore_create(int nb, unsigned short val)
+{
+	int semid = thrd_semaphore_get(nb);
+	if (semid != -1 && -1 != thrd_semaphore_set(semid, nb, val)) {
+#ifdef DEBUG
+		printf("Got semaphore #%d of %d mutexes\n", semid, nb);
+#endif
+		return semid;
+	}
+	return -1;
+}
+
+/* Removes the semaphore */
+int thrd_semaphore_destroy(int semid)
+{
+	#ifdef DEBUG
+		printf("Destroying semaphore %d\n", semid);
+	#endif
+	if (0 == semctl(semid, 0, IPC_RMID)) return 0;
+	perror("thrd_semaphore_destroy.semctl");
+	return -1;
 }
 
 /* Request resource to the semaphore and set the calling thread to sleep if
    it is not yet available. Thread resumes when resource is given. */
-int P(int semid, unsigned short index) {
+int thrd_mutex_lock(int semid, unsigned short index)
+{
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
 	if (0 == semop(semid, &ops, 1)) return 0;
-	if (errno != EINTR) perror("libthrd.P");
+	if (errno != EINTR) perror("thrd_mutex_lock");
 	return -1;
 }
 
 #ifdef _GNU_SOURCE
 #include <time.h>
-
 /* Same as P but waits at most nanos nanoseconds.
    Returns 0 if the lock was performed or 1 if it did not.
 	-1 on error. */
-int P_timed(int semid, unsigned short index, long nanos) {
+int thrd_mutex_lock_timed(int semid, unsigned short index, long nanos)
+{
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = 0 };
 	struct timespec timeout = { .tv_sec = 0, .tv_nsec = nanos };
 	if (0 == semtimedop(semid, &ops, 1, &timeout)) return 0;
 	if (errno == EAGAIN) return 1;
-	if (errno != EINTR) perror("libthrd.P_timed");
+	if (errno != EINTR) perror("thrd_mutex_lock_timed");
 	return -1;
 }
-
 #endif
 
 /* Same as P but doesn't block. Returns 0 if the lock was performed or
    1 if it did not. -1 on error. */
-int P_nowait(int semid, unsigned short index) {
+int thrd_mutex_lock_try(int semid, unsigned short index)
+{
 	struct sembuf ops = { .sem_num = index, .sem_op = -1, .sem_flg = IPC_NOWAIT };
 	if (0 == semop(semid, &ops, 1)) return 0;
 	if (errno == EAGAIN) return 1;
-	perror("libthrd.P_try");
+	perror("thrd_mutex_lock_try");
 	return -1;
 }
 
 /* Free resource */
-int V(int semid, unsigned short index) {
+int thrd_mutex_unlock(int semid, unsigned short index)
+{
 	struct sembuf ops = { .sem_num = index, .sem_op = 1, .sem_flg = 0 };
 	if (0 == semop(semid, &ops, 1)) return 0;
-	perror("libthrd.V");
+	perror("thrd_mutex_unlock");
 	return -1;
 }
 
@@ -121,8 +125,9 @@ int V(int semid, unsigned short index) {
 /* ----------- */
 /*   Threads   */
 /* ----------- */
-static void *startTask(void *_task) {
-	struct taskinfo *task = _task;
+static void *thrd_start_task(void *_task)
+{
+	struct thrd_task_info *task = _task;
 	/* Call the function */
 	task->function(task->argument);
 	/* Task is over, free memory */
@@ -133,40 +138,50 @@ static void *startTask(void *_task) {
 
 
 /* Returns 0 on success, negative integer if failed */
-int startThread(pthread_t *thread, void (*func)(void *), void *arg, size_t size) {
+int thrd_start(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
+{
 	pthread_t tid;
-	struct taskinfo *task;
+	struct thrd_task_info *task;
 	/* Save the task info for the thread */
-	task = malloc(sizeof(struct taskinfo));
-	if (task == NULL) { perror("startThread.task.malloc"); return -1; }
+	task = malloc(sizeof(struct thrd_task_info));
+	if (task == NULL) {
+		perror("thrd_start.task.malloc");
+		return -1;
+	}
 	task->function = func;
 	task->argument = malloc(size);
-	if (task->argument == NULL) { perror("startThread.task.argument.malloc"); return -2; }
+	if (task->argument == NULL) {
+		perror("thrd_start.task.argument.malloc");
+		return -1;
+	}
 	memcpy(task->argument, arg, size);
 	/* Start the thread */
-	if (0 != pthread_create(&tid, NULL, startTask, task)) {
-		perror("startThread.pthread_create"); return -3;
+	if (0 == pthread_create(&tid, NULL, thrd_start_task, task)) {
+		if (thread != NULL) *thread = tid;
+		return 0;
 	}
-	if (thread != NULL) *thread = tid;
-	return 0;
-}
-
-int killThread(pthread_t thread, int _signal) {
-#ifdef DEBUG
-	printf("Killing thread with signal %d\n", _signal);
-#endif
-	int status = pthread_kill(thread, _signal);
-	if (status == 0) return 0;
-	fprintf(stderr, "libthrd.killThread: %s\n", strerror(status));
+	perror("thrd_start.pthread_create");
 	return -1;
 }
 
-int waitThread(pthread_t thread) {
+int thrd_join(pthread_t thread)
+{
 #ifdef DEBUG
 	printf("Waiting thread\n");
 #endif
 	int status = pthread_join(thread, NULL);
 	if (status == 0) return 0;
-	fprintf(stderr, "libthrd.waitThread: %s\n", strerror(status));
+	fprintf(stderr, "thrd_join: %s\n", strerror(status));
+	return -1;
+}
+
+int thrd_kill(pthread_t thread, int _signal)
+{
+#ifdef DEBUG
+	printf("Killing thread with signal %d\n", _signal);
+#endif
+	int status = pthread_kill(thread, _signal);
+	if (status == 0) return 0;
+	fprintf(stderr, "thrd_kill: %s\n", strerror(status));
 	return -1;
 }

@@ -36,20 +36,20 @@ void loop(void* params) {
 	double x, y;
 	srand48_r(time(NULL) * hash(worker, sizeof(WorkerInfo_t)), &buffer);
 
-	P(worker->semid, 0);
+	thrd_mutex_lock(worker->semid, 0);
 	while (*(worker->remaining)) {
 		todo = (*(worker->remaining) >= worker->step) ? worker->step : *(worker->remaining);
 		*(worker->remaining) -= todo;
-		V(worker->semid, 0);
+		thrd_mutex_unlock(worker->semid, 0);
 		worker->shot += todo;
 		for ( ; todo > 0; --todo) {
 			drand48_r(&buffer, &x);
 			drand48_r(&buffer, &y);
 			if (module(x, y) <= 1.0) (worker->hit)++;
 		}
-		P(worker->semid, 0);
+		thrd_mutex_lock(worker->semid, 0);
 	}
-	V(worker->semid, 0);
+	thrd_mutex_unlock(worker->semid, 0);
 }
 
 
@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
 	step = remaining / threads / 20;
 	WorkerInfo_t workers[threads];
 	memset(workers, 0, threads * sizeof(WorkerInfo_t));
-	semid = initMutexes(1, 1);
+	semid = thrd_semaphore_create(1, 1);
 	printf("Starting with %ld shots and %ld threads\n", remaining, threads);
 
 	start = clock();
@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 		_worker->remaining = &remaining;
 		_worker->step = step;
 		_worker->semid = semid;
-		startThread(&(_worker->tid), loop, &_worker, sizeof(WorkerInfo_t *));
+		thrd_start(&(_worker->tid), loop, &_worker, sizeof(WorkerInfo_t *));
 	}
 
 	/* Start the work for the main thread */
@@ -98,8 +98,8 @@ int main(int argc, char** argv) {
 	loop(&_worker);
 
 	/* Wait until each thread returns */
-	for (i = 1; i < threads; i++) waitThread(workers[i].tid);
-	sem_free(semid);
+	for (i = 1; i < threads; i++) thrd_join(workers[i].tid);
+	thrd_semaphore_destroy(semid);
 
 	/* See results */
 	for (i = 0; i < threads; i++) {

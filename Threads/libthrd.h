@@ -2,19 +2,19 @@
 #define __LIBTHRD_H__
 
 /* Threads */
-int startThread(pthread_t *, void (*)(void *), void *, size_t);
-int waitThread(pthread_t);
-int killThread(pthread_t, int);
+int thrd_start(pthread_t *, void (*)(void *), void *, size_t);
+int thrd_join(pthread_t);
+int thrd_kill(pthread_t, int);
 
 /* Mutexes */
-int sem_free(int);
-int initMutexes(int, unsigned short);
-int P(int, unsigned short);
-int P_nowait(int, unsigned short);
-int V(int, unsigned short);
+int thrd_semaphore_create(int, unsigned short);
+int thrd_semaphore_destroy(int);
+int thrd_mutex_lock(int, unsigned short);
+int thrd_mutex_lock_try(int, unsigned short);
+int thrd_mutex_unlock(int, unsigned short);
 
 #ifdef _GNU_SOURCE
-int P_timed(int, unsigned short, long);
+int thrd_mutex_lock_timed(int, unsigned short, long);
 #endif
 
 #endif
