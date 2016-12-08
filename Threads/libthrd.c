@@ -12,6 +12,8 @@
 
 #include "libthrd.h"
 
+#define tell_error(str) fprintf(stderr, "%s@%d: %s\n", __func__, __LINE__, str)
+
 
 union semun {
 	int val;
@@ -34,7 +36,7 @@ static inline int thrd_semaphore_get(int nb)
 {
 	int semid = semget(IPC_PRIVATE, nb, 0600 | IPC_CREAT);
 	if (semid != -1) return semid;
-	perror("thrd_semaphore_get.semget");
+	perror("thrd_semaphore_get");
 	return -1;
 }
 
@@ -47,7 +49,7 @@ static inline int thrd_semaphore_set(int semid, int nb, unsigned short val)
 	for (i = 0; i < nb; ++i) values[i] = val;
 	union semun argument = { .array = values };
 	if (0 == semctl (semid, 0, SETALL, argument)) return 0;
-	perror("thrd_semaphore_set.semctl");
+	perror("thrd_semaphore_set");
 	return -1;
 }
 
@@ -71,7 +73,7 @@ int thrd_semaphore_destroy(int semid)
 		printf("Destroying semaphore %d\n", semid);
 	#endif
 	if (0 == semctl(semid, 0, IPC_RMID)) return 0;
-	perror("thrd_semaphore_destroy.semctl");
+	perror("thrd_semaphore_destroy");
 	return -1;
 }
 
@@ -151,7 +153,7 @@ int thrd_start(pthread_t *thread, void (*func)(void *), void *arg, size_t size)
 	task->function = func;
 	task->argument = malloc(size);
 	if (task->argument == NULL) {
-		perror("thrd_start.task.argument.malloc");
+		perror("thrd_start.argument.malloc");
 		return -1;
 	}
 	memcpy(task->argument, arg, size);
